@@ -1,0 +1,105 @@
+package org.sopac.stream;
+
+import java.awt.Image;
+import java.awt.Rectangle;
+import java.awt.Robot;
+import java.awt.Toolkit;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.util.Date;
+
+import javax.imageio.ImageIO;
+
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpResponse;
+import org.apache.http.HttpVersion;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.entity.mime.MultipartEntity;
+import org.apache.http.entity.mime.content.ContentBody;
+import org.apache.http.entity.mime.content.FileBody;
+import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.params.CoreProtocolPNames;
+import org.apache.http.util.EntityUtils;
+
+public class Main extends Thread {
+	
+	final static int WIDTH = 640;
+	final static int HEIGHT = 480;
+	final static String UPLOAD_URL = "http://www.sopac.org/live/upload.php";
+
+	/**
+	 * @param args
+	 */
+	public static void main(String[] args) {
+		//new Main().capture();
+		new Main().start();
+	}
+
+	public void run() {
+		System.out.println("Starting Stream Slide...");
+		System.out.println("www.sopac.org/live");
+		for (;;) {
+			capture();
+			System.out.print(".");
+			try {
+				Thread.sleep(10000); //10s
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+
+	public void capture() {
+		try {
+			// capture
+			BufferedImage imgS = new Robot().createScreenCapture(new Rectangle(Toolkit.getDefaultToolkit().getScreenSize()));
+
+			// resize
+			Image img1 = imgS.getScaledInstance(WIDTH, HEIGHT, Image.SCALE_SMOOTH);
+			BufferedImage imgR = new BufferedImageBuilder().bufferImage(img1);
+
+			// save locally
+			String label = String.valueOf(System.currentTimeMillis());
+			String f = System.getProperty("user.home") + "/" + label + ".jpg";
+			ImageIO.write(imgR, "jpg", new File(f));
+
+			// upload
+			upload(f);
+
+		} catch (Exception ex) {
+			ex.printStackTrace();
+		}
+	}
+
+	public void upload(String filePath) {
+		try {
+
+			HttpClient httpclient = new DefaultHttpClient();
+			httpclient.getParams().setParameter(CoreProtocolPNames.PROTOCOL_VERSION, HttpVersion.HTTP_1_1);
+
+			HttpPost httppost = new HttpPost(UPLOAD_URL);
+			File file = new File(filePath);
+
+			MultipartEntity mpEntity = new MultipartEntity();
+			ContentBody cbFile = new FileBody(file, "image/jpeg");
+			mpEntity.addPart("file", cbFile);
+
+			httppost.setEntity(mpEntity);
+			
+			HttpResponse response = httpclient.execute(httppost);
+			HttpEntity resEntity = response.getEntity();
+
+			//System.out.println(response.getStatusLine());
+			if (resEntity != null) {
+				String res = EntityUtils.toString(resEntity);
+				if (!res.startsWith("Upload: "))
+					System.err.println("Uploaded Failed - " + new Date().toString());
+			}
+			httpclient.getConnectionManager().shutdown();
+
+		} catch (Exception ex) {
+			System.err.println("Uploaded Failed - " + new Date().toString() + ":" + ex.getMessage());
+		}
+	}
+}
